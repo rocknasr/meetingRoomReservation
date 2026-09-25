@@ -1,0 +1,1530 @@
+openapi: 3.1.0
+info:
+  title: API de réservation de salles
+  version: 1.0.0
+  description: |
+    Contrat de l'API de gestion des salles, équipements, organisateurs et réservations.
+    Les dates et heures utilisent le format ISO 8601 avec fuseau ou décalage UTC.
+servers:
+  - url: http://localhost:8080
+    description: Environnement local
+tags:
+  - name: Buildings
+    description: Gestion des bâtiments
+  - name: Rooms
+    description: Gestion et recherche des salles
+  - name: Equipment
+    description: Gestion des équipements
+  - name: Organizers
+    description: Gestion des organisateurs
+  - name: Reservations
+    description: Gestion des réservations
+
+paths:
+  /api/buildings:
+    post:
+      tags: [Buildings]
+      summary: Créer un bâtiment
+      description: Crée un bâtiment avec un nom unique et un nombre d'étages positif.
+      operationId: createBuilding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBuildingRequest'
+      responses:
+        '201':
+          description: Bâtiment créé
+          headers:
+            Location:
+              description: URI du bâtiment créé
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingResponse'
+        '400':
+          $ref: '#/components/responses/ValidationBadRequest'
+        '409':
+          $ref: '#/components/responses/ResourceAlreadyExists'
+    get:
+      tags: [Buildings]
+      summary: Lister les bâtiments
+      description: Retourne tous les bâtiments, triés par nom sans tenir compte de la casse.
+      operationId: listBuildings
+      responses:
+        '200':
+          description: Liste des bâtiments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BuildingResponse'
+
+  /api/buildings/{buildingId}:
+    parameters:
+      - $ref: '#/components/parameters/BuildingId'
+    get:
+      tags: [Buildings]
+      summary: Consulter un bâtiment
+      description: Retourne le bâtiment demandé et son nombre d'étages.
+      operationId: getBuilding
+      responses:
+        '200':
+          description: Bâtiment trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingResponse'
+        '404':
+          $ref: '#/components/responses/BuildingNotFound'
+    put:
+      tags: [Buildings]
+      summary: Modifier un bâtiment
+      description: |
+        Remplace le nom et le nombre d'étages. La réduction du nombre d'étages est
+        refusée lorsqu'une salle ou un organisateur occupe un étage qui deviendrait invalide.
+      operationId: updateBuilding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBuildingRequest'
+      responses:
+        '200':
+          description: Bâtiment mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingResponse'
+        '400':
+          $ref: '#/components/responses/ValidationBadRequest'
+        '404':
+          $ref: '#/components/responses/BuildingNotFound'
+        '409':
+          $ref: '#/components/responses/BuildingUpdateConflict'
+
+  /api/rooms:
+    post:
+      tags: [Rooms]
+      summary: Créer une salle
+      description: |
+        Crée une salle avec un nom unique, la référence d'un bâtiment existant, un étage
+        valide dans ce bâtiment et une capacité strictement positive. Son statut initial
+        est `AVAILABLE`. Les codes d'équipement fournis doivent correspondre à des
+        équipements existants.
+      operationId: createRoom
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+      responses:
+        '201':
+          description: Salle créée
+          headers:
+            Location:
+              description: URI de la salle créée
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          $ref: '#/components/responses/ValidationBadRequest'
+        '404':
+          $ref: '#/components/responses/RoomCreationResourceNotFound'
+        '409':
+          $ref: '#/components/responses/ResourceAlreadyExists'
+    get:
+      tags: [Rooms]
+      summary: Lister les salles
+      description: Retourne toutes les salles avec leur statut et leurs équipements.
+      operationId: listRooms
+      responses:
+        '200':
+          description: Liste des salles, triée par nom
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoomResponse'
+
+  /api/rooms/available:
+    get:
+      tags: [Rooms]
+      summary: Rechercher les salles disponibles et compatibles
+      description: |
+        Ne conserve que les salles ayant le statut `AVAILABLE`, une capacité supérieure
+        ou égale à `capacity`, tous les équipements demandés et aucune réservation
+        confirmée chevauchant la période `[start, end[`.
+
+        Les résultats sont classés par nombre de places inutilisées croissant
+        (`capacité - capacity`), puis par nom sans tenir compte de la casse, puis par
+        identifiant. Cette opération ne crée aucune réservation et renvoie une liste
+        vide lorsqu'aucune salle n'est compatible.
+      operationId: findAvailableRooms
+      parameters:
+        - $ref: '#/components/parameters/Start'
+        - $ref: '#/components/parameters/End'
+        - name: capacity
+          in: query
+          required: true
+          description: Nombre de participants à accueillir
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          example: 25
+        - name: equipment
+          in: query
+          required: false
+          description: Codes des équipements exigés, séparés par des virgules
+          style: form
+          explode: false
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: '#/components/schemas/EquipmentCode'
+          example: [PROJECTOR, VIDEO_CONFERENCE]
+      responses:
+        '200':
+          description: Salles compatibles, éventuellement vide
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailableRoomResponse'
+              examples:
+                noAvailableRoom:
+                  summary: Aucune salle ne correspond aux critères
+                  value: []
+        '400':
+          $ref: '#/components/responses/AvailabilityBadRequest'
+
+  /api/rooms/{roomId}:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    get:
+      tags: [Rooms]
+      summary: Consulter une salle
+      description: Retourne la salle identifiée, y compris son statut et ses équipements.
+      operationId: getRoom
+      responses:
+        '200':
+          description: Salle trouvée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+    put:
+      tags: [Rooms]
+      summary: Remplacer les informations d'une salle
+      description: |
+        Remplace le nom, la référence du bâtiment, l'étage et la capacité de la salle.
+        L'étage doit exister dans le bâtiment référencé. Le statut et les équipements
+        ne sont pas modifiés. Le nouveau nom doit rester unique.
+      operationId: updateRoom
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoomRequest'
+      responses:
+        '200':
+          description: Salle mise à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          $ref: '#/components/responses/ValidationBadRequest'
+        '404':
+          $ref: '#/components/responses/RoomOrBuildingNotFound'
+        '409':
+          $ref: '#/components/responses/ResourceAlreadyExists'
+
+  /api/rooms/{roomId}/status:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    patch:
+      tags: [Rooms]
+      summary: Modifier le statut d'une salle
+      description: |
+        Place la salle dans l'état `AVAILABLE` ou `MAINTENANCE`. Une salle en
+        maintenance n'est plus proposée ni réservable. Les réservations existantes
+        sont conservées.
+      operationId: updateRoomStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoomStatusRequest'
+      responses:
+        '200':
+          description: Statut mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          $ref: '#/components/responses/ValidationBadRequest'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+
+  /api/rooms/{roomId}/equipment:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    put:
+      tags: [Rooms, Equipment]
+      summary: Remplacer les équipements d'une salle
+      description: |
+        La liste fournie remplace entièrement la liste actuelle. Une liste vide retire
+        tous les équipements. Chaque code doit désigner un équipement existant.
+      operationId: replaceRoomEquipment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceRoomEquipmentRequest'
+      responses:
+        '200':
+          description: Équipements de la salle mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          $ref: '#/components/responses/ValidationBadRequest'
+        '404':
+          $ref: '#/components/responses/RoomOrEquipmentNotFound'
+
+  /api/equipment:
+    post:
+      tags: [Equipment]
+      summary: Créer un équipement
+      description: Crée un équipement dont le code est unique et respecte le format attendu.
+      operationId: createEquipment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEquipmentRequest'
+      responses:
+        '201':
+          description: Équipement créé
+          headers:
+            Location:
+              description: URI de l'équipement créé
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EquipmentResponse'
+        '400':
+          $ref: '#/components/responses/ValidationBadRequest'
+        '409':
+          $ref: '#/components/responses/ResourceAlreadyExists'
+    get:
+      tags: [Equipment]
+      summary: Lister les équipements
+      description: Retourne tous les équipements disponibles, triés par code croissant.
+      operationId: listEquipment
+      responses:
+        '200':
+          description: Liste des équipements, triée par code
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EquipmentResponse'
+
+  /api/organizers:
+    post:
+      tags: [Organizers]
+      summary: Créer un organisateur
+      description: |
+        Crée un organisateur avec une adresse e-mail valide et unique, la référence d'un
+        bâtiment existant et un étage valide dans ce bâtiment. Cette localisation sert
+        au calcul de proximité avec les salles.
+      operationId: createOrganizer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizerRequest'
+      responses:
+        '201':
+          description: Organisateur créé
+          headers:
+            Location:
+              description: URI de l'organisateur créé
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizerResponse'
+        '400':
+          $ref: '#/components/responses/ValidationBadRequest'
+        '404':
+          $ref: '#/components/responses/OrganizerBuildingNotFound'
+        '409':
+          $ref: '#/components/responses/ResourceAlreadyExists'
+
+    get:
+      tags: [Organizers]
+      summary: Lister les organisateurs
+      description: Retourne tous les organisateurs, triés par nom puis par identifiant.
+      operationId: listOrganizers
+      responses:
+        '200':
+          description: Liste des organisateurs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizerResponse'
+
+  /api/organizers/{organizerId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizerId'
+    get:
+      tags: [Organizers]
+      summary: Consulter un organisateur
+      description: Retourne l'identité, l'adresse e-mail et la localisation de l'organisateur.
+      operationId: getOrganizer
+      responses:
+        '200':
+          description: Organisateur trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizerResponse'
+        '404':
+          $ref: '#/components/responses/OrganizerNotFound'
+
+  /api/reservations:
+    post:
+      tags: [Reservations]
+      summary: Réserver une salle précise
+      description: |
+        Le client choisit la salle avec `roomId`. La réservation est confirmée uniquement
+        si la salle et l'organisateur existent, si la salle est `AVAILABLE`, si sa capacité
+        est suffisante, si elle possède tous les équipements demandés et si aucune
+        réservation confirmée ne chevauche la période demandée.
+
+        Le début doit être dans le futur et strictement antérieur à la fin. La durée
+        maximale est de huit heures. Une réservation consécutive à une autre est admise.
+        Si la salle demandée est incompatible, elle n'est jamais remplacée automatiquement.
+      operationId: createReservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReservationRequest'
+      responses:
+        '201':
+          description: Réservation confirmée
+          headers:
+            Location:
+              description: URI de la réservation créée
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '400':
+          $ref: '#/components/responses/ReservationBadRequest'
+        '404':
+          $ref: '#/components/responses/ReservationResourceNotFound'
+        '409':
+          $ref: '#/components/responses/ReservationConflict'
+    get:
+      tags: [Reservations]
+      summary: Lister et filtrer les réservations
+      description: |
+        Retourne les réservations confirmées et annulées. Tous les filtres fournis sont
+        cumulés. Avec `from` et `to`, sont retenues les réservations qui chevauchent la
+        période demandée. Le résultat est trié par date de début puis par identifiant.
+      operationId: listReservations
+      parameters:
+        - name: roomId
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ResourceId'
+        - name: organizerId
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ResourceId'
+        - name: from
+          in: query
+          required: false
+          description: Inclut les réservations dont la fin est strictement postérieure à cette date.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Inclut les réservations dont le début est strictement antérieur à cette date.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Réservations correspondant aux filtres, triées par début puis identifiant
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReservationResponse'
+        '400':
+          $ref: '#/components/responses/ReservationQueryBadRequest'
+
+  /api/reservations/automatic:
+    post:
+      tags: [Reservations]
+      summary: Réserver automatiquement la salle la plus adaptée
+      description: |
+        Le client ne fournit pas de salle. Après validation de l'organisateur et de la
+        période, le système ne conserve que les salles `AVAILABLE` ayant une capacité
+        suffisante, tous les équipements demandés et aucune réservation confirmée en
+        conflit avec la période.
+
+        Pour chaque candidate :
+
+        - `unusedCapacity = room.capacity - numberOfParticipants` ;
+        - dans le même bâtiment (`room.building.id = organizer.building.id`),
+          `distance = abs(room.floor - organizer.floor)` ;
+        - dans des bâtiments différents,
+          `distance = 10 + abs(room.floor - organizer.floor)` ;
+        - `score = distance * 10 + unusedCapacity`.
+
+        Le score le plus faible est le meilleur : un étage de distance équivaut à dix places
+        inutilisées, tandis qu'un changement de bâtiment ajoute une pénalité de 100
+        points. Les égalités sont départagées par nom de salle sans tenir compte de la
+        casse, puis par identifiant. La première salle est attribuée et la réservation
+        est créée de manière atomique. Si aucune salle n'est compatible, aucune
+        réservation n'est créée et l'erreur `NO_COMPATIBLE_ROOM` est renvoyée.
+      operationId: createAutomaticReservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomaticReservationRequest'
+      responses:
+        '201':
+          description: Réservation confirmée avec la salle attribuée
+          headers:
+            Location:
+              description: URI de la réservation créée
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '400':
+          $ref: '#/components/responses/AutomaticReservationBadRequest'
+        '404':
+          $ref: '#/components/responses/AutomaticReservationResourceNotFound'
+        '409':
+          $ref: '#/components/responses/NoCompatibleRoom'
+
+  /api/reservations/{reservationId}:
+    parameters:
+      - $ref: '#/components/parameters/ReservationId'
+    get:
+      tags: [Reservations]
+      summary: Consulter une réservation
+      description: Retourne la réservation demandée, qu'elle soit confirmée ou annulée.
+      operationId: getReservation
+      responses:
+        '200':
+          description: Réservation trouvée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '404':
+          $ref: '#/components/responses/ReservationNotFound'
+
+  /api/reservations/{reservationId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ReservationId'
+    patch:
+      tags: [Reservations]
+      summary: Annuler une réservation
+      description: |
+        Passe une réservation `CONFIRMED` au statut `CANCELLED`. La réservation reste
+        consultable et ne bloque plus la salle. Une seconde annulation renvoie
+        `RESERVATION_ALREADY_CANCELLED`.
+      operationId: cancelReservation
+      responses:
+        '200':
+          description: Réservation annulée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '404':
+          $ref: '#/components/responses/CancellationReservationNotFound'
+        '409':
+          $ref: '#/components/responses/ReservationAlreadyCancelled'
+
+components:
+  parameters:
+    BuildingId:
+      name: buildingId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    RoomId:
+      name: roomId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    OrganizerId:
+      name: organizerId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    ReservationId:
+      name: reservationId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    Start:
+      name: start
+      in: query
+      required: true
+      description: Début de la période recherchée
+      schema:
+        type: string
+        format: date-time
+      example: '2026-10-15T14:00:00+02:00'
+    End:
+      name: end
+      in: query
+      required: true
+      description: Fin de la période recherchée
+      schema:
+        type: string
+        format: date-time
+      example: '2026-10-15T16:00:00+02:00'
+
+  responses:
+    ValidationBadRequest:
+      description: Un ou plusieurs champs de la requête sont invalides
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+    AvailabilityBadRequest:
+      description: Les critères ou la période de recherche sont invalides
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            invalidPeriod:
+              summary: Période invalide
+              value:
+                code: INVALID_RESERVATION_PERIOD
+                message: La date de début doit être antérieure à la date de fin
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/rooms/available
+                details: {}
+                fieldErrors: {}
+            invalidCapacity:
+              summary: Capacité invalide
+              value:
+                code: VALIDATION_ERROR
+                message: La requête contient des données invalides
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/rooms/available
+                details: {}
+                fieldErrors:
+                  capacity: doit être strictement positive
+    ReservationBadRequest:
+      description: Les données ou la période de réservation sont invalides
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            invalidPeriod:
+              summary: Période invalide
+              value:
+                code: INVALID_RESERVATION_PERIOD
+                message: Une réservation ne peut pas dépasser huit heures
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations
+                details: {}
+                fieldErrors: {}
+            validationError:
+              summary: Champ invalide
+              value:
+                code: VALIDATION_ERROR
+                message: La requête contient des données invalides
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations
+                details: {}
+                fieldErrors:
+                  numberOfParticipants: doit être strictement positif
+    AutomaticReservationBadRequest:
+      description: Les données ou la période de réservation automatique sont invalides
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            invalidPeriod:
+              summary: Période invalide
+              value:
+                code: INVALID_RESERVATION_PERIOD
+                message: Une réservation ne peut pas dépasser huit heures
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations/automatic
+                details: {}
+                fieldErrors: {}
+            validationError:
+              summary: Champ invalide
+              value:
+                code: VALIDATION_ERROR
+                message: La requête contient des données invalides
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations/automatic
+                details: {}
+                fieldErrors:
+                  numberOfParticipants: doit être strictement positif
+    ReservationQueryBadRequest:
+      description: Les filtres de recherche sont invalides
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: INVALID_RESERVATION_PERIOD
+            message: Le paramètre from doit être antérieur au paramètre to
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/reservations
+            details: {}
+            fieldErrors: {}
+    BuildingNotFound:
+      description: Le bâtiment demandé n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: BUILDING_NOT_FOUND
+            message: Le bâtiment 3 n'existe pas
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/buildings/3
+            details:
+              buildingId: 3
+            fieldErrors: {}
+    OrganizerBuildingNotFound:
+      description: Le bâtiment associé à l'organisateur n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: BUILDING_NOT_FOUND
+            message: Le bâtiment 3 n'existe pas
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/organizers
+            details:
+              buildingId: 3
+            fieldErrors: {}
+    RoomCreationResourceNotFound:
+      description: Le bâtiment ou au moins un équipement demandé n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            buildingNotFound:
+              value:
+                code: BUILDING_NOT_FOUND
+                message: Le bâtiment 3 n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/rooms
+                details:
+                  buildingId: 3
+                fieldErrors: {}
+            equipmentNotFound:
+              value:
+                code: EQUIPMENT_NOT_FOUND
+                message: L'équipement PROJECTOR n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/rooms
+                details:
+                  equipmentCode: PROJECTOR
+                fieldErrors: {}
+    RoomOrBuildingNotFound:
+      description: La salle ou le bâtiment demandé n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            roomNotFound:
+              value:
+                code: ROOM_NOT_FOUND
+                message: La salle 7 n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/rooms/7
+                details:
+                  roomId: 7
+                fieldErrors: {}
+            buildingNotFound:
+              value:
+                code: BUILDING_NOT_FOUND
+                message: Le bâtiment 3 n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/rooms/7
+                details:
+                  buildingId: 3
+                fieldErrors: {}
+    RoomNotFound:
+      description: La salle demandée n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: ROOM_NOT_FOUND
+            message: La salle 7 n'existe pas
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/rooms/7
+            details:
+              roomId: 7
+            fieldErrors: {}
+    OrganizerNotFound:
+      description: L'organisateur demandé n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: ORGANIZER_NOT_FOUND
+            message: L'organisateur 12 n'existe pas
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/organizers/12
+            details:
+              organizerId: 12
+            fieldErrors: {}
+    ReservationNotFound:
+      description: La réservation demandée n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: RESERVATION_NOT_FOUND
+            message: La réservation 42 n'existe pas
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/reservations/42
+            details:
+              reservationId: 42
+            fieldErrors: {}
+    CancellationReservationNotFound:
+      description: La réservation à annuler n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: RESERVATION_NOT_FOUND
+            message: La réservation 42 n'existe pas
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/reservations/42/cancel
+            details:
+              reservationId: 42
+            fieldErrors: {}
+    EquipmentNotFound:
+      description: Au moins un équipement demandé n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: EQUIPMENT_NOT_FOUND
+            message: L'équipement VIDEO_CONFERENCE n'existe pas
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/rooms
+            details:
+              equipmentCode: VIDEO_CONFERENCE
+            fieldErrors: {}
+    RoomOrEquipmentNotFound:
+      description: La salle ou au moins un équipement demandé n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            roomNotFound:
+              value:
+                code: ROOM_NOT_FOUND
+                message: La salle 7 n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/rooms/7/equipment
+                details:
+                  roomId: 7
+                fieldErrors: {}
+            equipmentNotFound:
+              value:
+                code: EQUIPMENT_NOT_FOUND
+                message: L'équipement VIDEO_CONFERENCE n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/rooms/7/equipment
+                details:
+                  equipmentCode: VIDEO_CONFERENCE
+                fieldErrors: {}
+    ReservationResourceNotFound:
+      description: La salle, l'organisateur ou un équipement demandé n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            roomNotFound:
+              value:
+                code: ROOM_NOT_FOUND
+                message: La salle 7 n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations
+                details:
+                  roomId: 7
+                fieldErrors: {}
+            organizerNotFound:
+              value:
+                code: ORGANIZER_NOT_FOUND
+                message: L'organisateur 12 n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations
+                details:
+                  organizerId: 12
+                fieldErrors: {}
+            equipmentNotFound:
+              value:
+                code: EQUIPMENT_NOT_FOUND
+                message: L'équipement PROJECTOR n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations
+                details:
+                  equipmentCode: PROJECTOR
+                fieldErrors: {}
+    AutomaticReservationResourceNotFound:
+      description: L'organisateur ou un équipement demandé n'existe pas
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            organizerNotFound:
+              value:
+                code: ORGANIZER_NOT_FOUND
+                message: L'organisateur 12 n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations/automatic
+                details:
+                  organizerId: 12
+                fieldErrors: {}
+            equipmentNotFound:
+              value:
+                code: EQUIPMENT_NOT_FOUND
+                message: L'équipement PROJECTOR n'existe pas
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations/automatic
+                details:
+                  equipmentCode: PROJECTOR
+                fieldErrors: {}
+    ResourceAlreadyExists:
+      description: Une valeur soumise à une contrainte d'unicité est déjà utilisée
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+    BuildingUpdateConflict:
+      description: Le nom est déjà utilisé ou le nouveau nombre d'étages est incompatible
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            nameAlreadyExists:
+              value:
+                code: RESOURCE_ALREADY_EXISTS
+                message: Un bâtiment utilise déjà ce nom
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/buildings/3
+                details: {}
+                fieldErrors: {}
+            occupiedFloor:
+              value:
+                code: BUILDING_FLOOR_COUNT_CONFLICT
+                message: Une salle ou un organisateur occupe un étage qui serait supprimé
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/buildings/3
+                details:
+                  highestOccupiedFloor: 4
+                fieldErrors: {}
+    ReservationConflict:
+      description: La salle choisie ne peut pas accueillir la réservation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          examples:
+            roomUnavailable:
+              value:
+                code: ROOM_UNAVAILABLE
+                message: La salle Orion est en maintenance
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations
+                details:
+                  roomId: 7
+                fieldErrors: {}
+            capacityExceeded:
+              value:
+                code: ROOM_CAPACITY_EXCEEDED
+                message: La capacité de la salle est insuffisante
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations
+                details:
+                  roomId: 7
+                  roomCapacity: 20
+                  numberOfParticipants: 25
+                fieldErrors: {}
+            missingEquipment:
+              value:
+                code: MISSING_REQUIRED_EQUIPMENT
+                message: La salle ne possède pas tous les équipements demandés
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations
+                details:
+                  roomId: 7
+                  missingEquipmentCodes: [PROJECTOR]
+                fieldErrors: {}
+            roomAlreadyReserved:
+              value:
+                code: ROOM_ALREADY_RESERVED
+                message: La salle Orion est déjà réservée sur cette période
+                timestamp: '2026-10-01T13:45:12Z'
+                path: /api/reservations
+                details:
+                  roomId: 7
+                  conflictingReservationId: 38
+                fieldErrors: {}
+    NoCompatibleRoom:
+      description: Aucune salle n'est compatible avec les critères de réservation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: NO_COMPATIBLE_ROOM
+            message: Aucune salle disponible ne correspond aux critères demandés
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/reservations/automatic
+            details: {}
+            fieldErrors: {}
+    ReservationAlreadyCancelled:
+      description: La réservation est déjà annulée
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+          example:
+            code: RESERVATION_ALREADY_CANCELLED
+            message: La réservation 42 est déjà annulée
+            timestamp: '2026-10-01T13:45:12Z'
+            path: /api/reservations/42/cancel
+            details:
+              reservationId: 42
+            fieldErrors: {}
+
+  schemas:
+    ResourceId:
+      type: integer
+      format: int64
+      minimum: 1
+      example: 7
+
+    RoomStatus:
+      type: string
+      enum: [AVAILABLE, MAINTENANCE]
+
+    ReservationStatus:
+      type: string
+      enum: [CONFIRMED, CANCELLED]
+
+    EquipmentCode:
+      type: string
+      pattern: '^[A-Z][A-Z0-9_]{1,49}$'
+      example: PROJECTOR
+
+    BuildingName:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: Nom unique du bâtiment, sans tenir compte de la casse
+      example: Bâtiment A
+
+    FloorNumber:
+      type: integer
+      format: int32
+      minimum: 0
+      maximum: 199
+      description: Doit être inférieur au nombre d'étages du bâtiment référencé
+      example: 2
+
+    NumberOfFloors:
+      type: integer
+      format: int32
+      minimum: 1
+      maximum: 200
+      description: Nombre d'étages, rez-de-chaussée inclus
+      example: 5
+
+    CreateBuildingRequest:
+      type: object
+      additionalProperties: false
+      required: [name, numberOfFloors]
+      properties:
+        name:
+          $ref: '#/components/schemas/BuildingName'
+        numberOfFloors:
+          $ref: '#/components/schemas/NumberOfFloors'
+
+    UpdateBuildingRequest:
+      type: object
+      additionalProperties: false
+      required: [name, numberOfFloors]
+      properties:
+        name:
+          $ref: '#/components/schemas/BuildingName'
+        numberOfFloors:
+          $ref: '#/components/schemas/NumberOfFloors'
+
+    BuildingResponse:
+      type: object
+      additionalProperties: false
+      required: [id, name, numberOfFloors]
+      properties:
+        id:
+          $ref: '#/components/schemas/ResourceId'
+        name:
+          $ref: '#/components/schemas/BuildingName'
+        numberOfFloors:
+          $ref: '#/components/schemas/NumberOfFloors'
+
+    CreateRoomRequest:
+      type: object
+      additionalProperties: false
+      required: [name, buildingId, floor, capacity]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Orion
+        buildingId:
+          $ref: '#/components/schemas/ResourceId'
+        floor:
+          $ref: '#/components/schemas/FloorNumber'
+        capacity:
+          type: integer
+          format: int32
+          minimum: 1
+          example: 30
+        equipmentCodes:
+          type: array
+          uniqueItems: true
+          default: []
+          items:
+            $ref: '#/components/schemas/EquipmentCode'
+
+    UpdateRoomRequest:
+      type: object
+      additionalProperties: false
+      required: [name, buildingId, floor, capacity]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Orion
+        buildingId:
+          $ref: '#/components/schemas/ResourceId'
+        floor:
+          $ref: '#/components/schemas/FloorNumber'
+        capacity:
+          type: integer
+          format: int32
+          minimum: 1
+          example: 32
+
+    UpdateRoomStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/RoomStatus'
+
+    ReplaceRoomEquipmentRequest:
+      type: object
+      additionalProperties: false
+      required: [equipmentCodes]
+      properties:
+        equipmentCodes:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/EquipmentCode'
+          example: [PROJECTOR, WHITEBOARD]
+
+    RoomSummaryResponse:
+      type: object
+      required: [id, name, building, floor, capacity, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/ResourceId'
+        name:
+          type: string
+          example: Orion
+        building:
+          $ref: '#/components/schemas/BuildingResponse'
+        floor:
+          $ref: '#/components/schemas/FloorNumber'
+        capacity:
+          type: integer
+          format: int32
+          minimum: 1
+          example: 30
+        status:
+          $ref: '#/components/schemas/RoomStatus'
+
+    RoomResponse:
+      allOf:
+        - $ref: '#/components/schemas/RoomSummaryResponse'
+        - type: object
+          required: [equipment]
+          properties:
+            equipment:
+              type: array
+              items:
+                $ref: '#/components/schemas/EquipmentResponse'
+
+    AvailableRoomResponse:
+      allOf:
+        - $ref: '#/components/schemas/RoomResponse'
+        - type: object
+          required: [unusedCapacity]
+          properties:
+            unusedCapacity:
+              type: integer
+              format: int32
+              minimum: 0
+              description: Capacité de la salle moins la capacité demandée
+              example: 5
+
+    CreateEquipmentRequest:
+      type: object
+      additionalProperties: false
+      required: [code, label]
+      properties:
+        code:
+          $ref: '#/components/schemas/EquipmentCode'
+        label:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Vidéoprojecteur
+
+    EquipmentResponse:
+      type: object
+      additionalProperties: false
+      required: [id, code, label]
+      properties:
+        id:
+          $ref: '#/components/schemas/ResourceId'
+        code:
+          $ref: '#/components/schemas/EquipmentCode'
+        label:
+          type: string
+          example: Vidéoprojecteur
+
+    CreateOrganizerRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, buildingId, floor]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+          example: Alice Martin
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: alice.martin@example.org
+        buildingId:
+          $ref: '#/components/schemas/ResourceId'
+        floor:
+          $ref: '#/components/schemas/FloorNumber'
+
+    OrganizerSummaryResponse:
+      type: object
+      required: [id, name, building, floor]
+      properties:
+        id:
+          $ref: '#/components/schemas/ResourceId'
+        name:
+          type: string
+          example: Alice Martin
+        building:
+          $ref: '#/components/schemas/BuildingResponse'
+        floor:
+          $ref: '#/components/schemas/FloorNumber'
+
+    OrganizerResponse:
+      allOf:
+        - $ref: '#/components/schemas/OrganizerSummaryResponse'
+        - type: object
+          required: [email]
+          properties:
+            email:
+              type: string
+              format: email
+              example: alice.martin@example.org
+
+    ReservationRequestFields:
+      type: object
+      required: [title, organizerId, start, end, numberOfParticipants]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Soutenance de projet
+        organizerId:
+          $ref: '#/components/schemas/ResourceId'
+        start:
+          type: string
+          format: date-time
+          example: '2026-10-15T14:00:00+02:00'
+        end:
+          type: string
+          format: date-time
+          example: '2026-10-15T16:00:00+02:00'
+        numberOfParticipants:
+          type: integer
+          format: int32
+          minimum: 1
+          example: 25
+        requiredEquipmentCodes:
+          type: array
+          uniqueItems: true
+          default: []
+          items:
+            $ref: '#/components/schemas/EquipmentCode'
+          example: [PROJECTOR, VIDEO_CONFERENCE]
+
+    CreateReservationRequest:
+      allOf:
+        - $ref: '#/components/schemas/ReservationRequestFields'
+        - type: object
+          required: [roomId]
+          properties:
+            roomId:
+              $ref: '#/components/schemas/ResourceId'
+
+    AutomaticReservationRequest:
+      allOf:
+        - $ref: '#/components/schemas/ReservationRequestFields'
+
+    ReservationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - status
+        - room
+        - organizer
+        - start
+        - end
+        - numberOfParticipants
+        - requiredEquipmentCodes
+        - createdAt
+      properties:
+        id:
+          $ref: '#/components/schemas/ResourceId'
+        title:
+          type: string
+          example: Soutenance de projet
+        status:
+          $ref: '#/components/schemas/ReservationStatus'
+        room:
+          $ref: '#/components/schemas/RoomSummaryResponse'
+        organizer:
+          $ref: '#/components/schemas/OrganizerSummaryResponse'
+        start:
+          type: string
+          format: date-time
+          example: '2026-10-15T14:00:00+02:00'
+        end:
+          type: string
+          format: date-time
+          example: '2026-10-15T16:00:00+02:00'
+        numberOfParticipants:
+          type: integer
+          format: int32
+          minimum: 1
+          example: 25
+        requiredEquipmentCodes:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/EquipmentCode'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-10-01T13:45:12Z'
+
+    AutomaticReservationResponse:
+      allOf:
+        - $ref: '#/components/schemas/ReservationResponse'
+        - type: object
+          required: [assignment]
+          properties:
+            assignment:
+              $ref: '#/components/schemas/RoomAssignmentScore'
+
+    RoomAssignmentScore:
+      type: object
+      additionalProperties: false
+      description: Détail du score ayant conduit au choix automatique de la salle
+      required: [distance, unusedCapacity, score]
+      properties:
+        distance:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Distance calculée entre l'organisateur et la salle
+          example: 1
+        unusedCapacity:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Nombre de places restantes dans la salle
+          example: 5
+        score:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Résultat de `distance * 10 + unusedCapacity`
+          example: 15
+
+    ApiErrorResponse:
+      type: object
+      description: |
+        Format commun à toutes les erreurs de l'API.
+
+        | Code | HTTP | Signification |
+        | --- | ---: | --- |
+        | `VALIDATION_ERROR` | 400 | Un ou plusieurs champs sont invalides. |
+        | `INVALID_RESERVATION_PERIOD` | 400 | La période est passée, inversée ou dépasse huit heures. |
+        | `BUILDING_NOT_FOUND` | 404 | Le bâtiment demandé n'existe pas. |
+        | `ROOM_NOT_FOUND` | 404 | La salle demandée n'existe pas. |
+        | `ORGANIZER_NOT_FOUND` | 404 | L'organisateur demandé n'existe pas. |
+        | `RESERVATION_NOT_FOUND` | 404 | La réservation demandée n'existe pas. |
+        | `EQUIPMENT_NOT_FOUND` | 404 | Au moins un code d'équipement n'existe pas. |
+        | `ROOM_CAPACITY_EXCEEDED` | 409 | La salle choisie est trop petite. |
+        | `MISSING_REQUIRED_EQUIPMENT` | 409 | La salle choisie ne possède pas tous les équipements demandés. |
+        | `ROOM_ALREADY_RESERVED` | 409 | Une réservation confirmée chevauche la période. |
+        | `ROOM_UNAVAILABLE` | 409 | La salle choisie est en maintenance. |
+        | `NO_COMPATIBLE_ROOM` | 409 | Aucune salle ne convient à l'attribution automatique. |
+        | `RESERVATION_ALREADY_CANCELLED` | 409 | La réservation est déjà annulée. |
+        | `RESOURCE_ALREADY_EXISTS` | 409 | Un nom, code ou e-mail unique est déjà utilisé. |
+        | `BUILDING_FLOOR_COUNT_CONFLICT` | 409 | Le nombre d'étages est incompatible avec une localisation existante. |
+      additionalProperties: false
+      required: [code, message, timestamp, path]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - INVALID_RESERVATION_PERIOD
+            - BUILDING_NOT_FOUND
+            - ROOM_NOT_FOUND
+            - ORGANIZER_NOT_FOUND
+            - RESERVATION_NOT_FOUND
+            - EQUIPMENT_NOT_FOUND
+            - ROOM_CAPACITY_EXCEEDED
+            - MISSING_REQUIRED_EQUIPMENT
+            - ROOM_ALREADY_RESERVED
+            - ROOM_UNAVAILABLE
+            - NO_COMPATIBLE_ROOM
+            - RESERVATION_ALREADY_CANCELLED
+            - RESOURCE_ALREADY_EXISTS
+            - BUILDING_FLOOR_COUNT_CONFLICT
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        path:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          default: {}
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: string
+          default: {}

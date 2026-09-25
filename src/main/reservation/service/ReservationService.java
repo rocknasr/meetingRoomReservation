@@ -1,0 +1,250 @@
+package reservation.service;
+
+import reservation.dto.ReservationRequest;
+import reservation.exception.ConflictException;
+import reservation.exception.InvalidReservationPeriodException;
+import reservation.exception.ResourceNotFoundException;
+import reservation.exception.ValidationException;
+import reservation.model.Organizer;
+import reservation.model.Reservation;
+import reservation.model.ReservationStatus;
+import reservation.model.Room;
+import reservation.repository.ReservationRepository;
+import reservation.repository.RoomRepository;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Creation, consultation et annulation des reservations.
+ *
+ * <p>Les regles de compatibilite et de classement des salles sont deleguees au
+ * {@link RoomAssignmentService} ; ce service se charge de l'ordre des controles,
+ * des erreurs renvoyees et de la persistance.</p>
+ */
+@Service
+public class ReservationService {
+
+    private final ReservationRepository reservationRepository;
+    private final RoomRepository roomRepository;
+    private final RoomService roomService;
+    private final OrganizerService organizerService;
+    private final EquipmentService equipmentService;
+    private final RoomAssignmentService roomAssignmentService;
+    private final ReservationPeriodValidator periodValidator;
+
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            RoomRepository roomRepository,
+            RoomService roomService,
+            OrganizerService organizerService,
+            EquipmentService equipmentService,
+            RoomAssignmentService roomAssignmentService,
+            ReservationPeriodValidator periodValidator) {
+        this.reservationRepository = reservationRepository;
+        this.roomRepository = roomRepository;
+        this.roomService = roomService;
+        this.organizerService = organizerService;
+        this.equipmentService = equipmentService;
+        this.roomAssignmentService = roomAssignmentService;
+        this.periodValidator = periodValidator;
+    }
+
+    /**
+     * Reserve la salle explicitement choisie par le client.
+     *
+     * <p>La salle demandee n'est jamais remplacee : la demande est refusee des
+     * qu'une condition n'est pas satisfaite.</p>
+     *
+     * @param request salle, organisateur, periode et besoins de la reunion
+     * @return la reservation confirmee
+     * @throws InvalidReservationPeriodException si la periode est invalide
+     * @throws ResourceNotFoundException         si la salle, l'organisateur ou un equipement est inconnu
+     * @throws ConflictException                 si la salle ne peut pas accueillir la reunion
+     */
+    public Reservation create(ReservationRequest request) {
+        Instant start = request.getStart().toInstant();
+        Instant end = request.getEnd().toInstant();
+        periodValidator.validateForReservation(start, end);
+
+        if (request.getRoomId() == null) {
+            throw new ValidationException(Map.of("roomId", "est obligatoire"));
+        }
+
+        Organizer organizer = organizerService.findById(request.getOrganizerId());
+        Room room = roomService.findById(request.getRoomId());
+        Set<String> requiredEquipment = requiredEquipmentOf(request);
+        equipmentService.checkAllExist(requiredEquipment);
+
+        checkRoomAccepts(room, request.getNumberOfParticipants(), requiredEquipment, start, end);
+
+        return save(request, room, organizer, start, end, requiredEquipment);
+    }
+
+    /**
+     * Attribue automatiquement la salle compatible la mieux classee, puis cree la
+     * reservation.
+     *
+     * @param request organisateur, periode et besoins de la reunion
+     * @return la reservation confirmee et la salle attribuee
+     * @throws InvalidReservationPeriodException si la periode est invalide
+     * @throws ResourceNotFoundException         si l'organisateur ou un equipement est inconnu
+     * @throws ConflictException                 si aucune salle n'est compatible
+     */
+    public Reservation createAutomatic(ReservationRequest request) {
+        Instant start = request.getStart().toInstant();
+        Instant end = request.getEnd().toInstant();
+        periodValidator.validateForReservation(start, end);
+
+        Organizer organizer = organizerService.findById(request.getOrganizerId());
+        Set<String> requiredEquipment = requiredEquipmentOf(request);
+        equipmentService.checkAllExist(requiredEquipment);
+
+        List<Reservation> confirmed = reservationRepository.findByStatus(ReservationStatus.CONFIRMED);
+        Room room = roomAssignmentService.selectBestRoom(
+                        roomRepository.findAll(),
+                        organizer,
+                        request.getNumberOfParticipants(),
+                        requiredEquipment,
+                        confirmed,
+                        start,
+                        end)
+                .orElseThrow(ConflictException::noCompatibleRoom);
+
+        return save(request, room, organizer, start, end, requiredEquipment);
+    }
+
+    /**
+     * @param id identifiant recherche
+     * @return la reservation correspondante, confirmee ou annulee
+     * @throws ResourceNotFoundException si la reservation n'existe pas
+     */
+    public Reservation findById(Long id) {
+        return reservationRepository.findById(id)
+                .orElseThrow(() -> ResourceNotFoundException.reservation(id));
+    }
+
+    /**
+     * Filtre les reservations, confirmees comme annulees. Tous les filtres fournis
+     * sont cumules.
+     *
+     * @param roomId      salle attendue, ou {@code null}
+     * @param organizerId organisateur attendu, ou {@code null}
+     * @param from        borne basse de la periode, ou {@code null}
+     * @param to          borne haute de la periode, ou {@code null}
+     * @return les reservations retenues, triees par debut puis par identifiant
+     * @throws InvalidReservationPeriodException si {@code from} n'est pas anterieur a {@code to}
+     */
+    public List<Reservation> search(Long roomId, Long organizerId, Instant from, Instant to) {
+        periodValidator.validateFilterRange(from, to);
+
+        List<Reservation> found = new ArrayList<>();
+        for (Reservation reservation : reservationRepository.findAll()) {
+            if (matchesFilters(reservation, roomId, organizerId, from, to)) {
+                found.add(reservation);
+            }
+        }
+
+        found.sort(Comparator
+                .comparing(Reservation::getStart)
+                .thenComparing(Reservation::getId));
+        return found;
+    }
+
+    /**
+     * Applique les filtres fournis a une reservation. Un filtre absent est ignore,
+     * et les bornes retiennent les reservations qui chevauchent la periode demandee.
+     */
+    private boolean matchesFilters(
+            Reservation reservation, Long roomId, Long organizerId, Instant from, Instant to) {
+        if (roomId != null && !roomId.equals(reservation.getRoom().getId())) {
+            return false;
+        }
+        if (organizerId != null && !organizerId.equals(reservation.getOrganizer().getId())) {
+            return false;
+        }
+        if (from != null && !reservation.getEnd().isAfter(from)) {
+            return false;
+        }
+        return to == null || reservation.getStart().isBefore(to);
+    }
+
+    /**
+     * Annule une reservation confirmee. Elle reste consultable mais ne bloque plus
+     * la salle.
+     *
+     * @param id identifiant de la reservation
+     * @return la reservation annulee
+     * @throws ResourceNotFoundException si la reservation n'existe pas
+     * @throws ConflictException         si la reservation est deja annulee
+     */
+    public Reservation cancel(Long id) {
+        Reservation reservation = findById(id);
+        if (!reservation.isConfirmed()) {
+            throw ConflictException.reservationAlreadyCancelled(id);
+        }
+        reservation.setStatus(ReservationStatus.CANCELLED);
+        return reservationRepository.save(reservation);
+    }
+
+    /**
+     * Verifie qu'une salle choisie explicitement accepte la reunion et leve
+     * l'erreur precise correspondant a la premiere condition non satisfaite.
+     */
+    private void checkRoomAccepts(
+            Room room, int numberOfParticipants, Set<String> requiredEquipment, Instant start, Instant end) {
+        if (!room.isAvailable()) {
+            throw ConflictException.roomUnavailable(room);
+        }
+        if (room.getCapacity() < numberOfParticipants) {
+            throw ConflictException.roomCapacityExceeded(room, numberOfParticipants);
+        }
+        Set<String> missing = room.findMissingEquipment(requiredEquipment);
+        if (!missing.isEmpty()) {
+            throw ConflictException.missingEquipment(room, missing);
+        }
+        List<Reservation> confirmed =
+                reservationRepository.findByRoomIdAndStatus(room.getId(), ReservationStatus.CONFIRMED);
+        for (Reservation existing : confirmed) {
+            if (existing.overlaps(start, end)) {
+                throw ConflictException.roomAlreadyReserved(room, existing);
+            }
+        }
+    }
+
+    /**
+     * Une liste d'equipements absente signifie qu'aucun equipement n'est exige.
+     */
+    private Set<String> requiredEquipmentOf(ReservationRequest request) {
+        return request.getRequiredEquipmentCodes() == null ? Set.of() : request.getRequiredEquipmentCodes();
+    }
+
+    /**
+     * Enregistre une reservation confirmee a partir des donnees validees.
+     */
+    private Reservation save(
+            ReservationRequest request,
+            Room room,
+            Organizer organizer,
+            Instant start,
+            Instant end,
+            Set<String> requiredEquipment) {
+        Reservation reservation = new Reservation();
+        reservation.setTitle(request.getTitle());
+        reservation.setRoom(room);
+        reservation.setOrganizer(organizer);
+        reservation.setStart(start);
+        reservation.setEnd(end);
+        reservation.setNumberOfParticipants(request.getNumberOfParticipants());
+        reservation.setStatus(ReservationStatus.CONFIRMED);
+        reservation.setRequiredEquipmentCodes(new LinkedHashSet<>(requiredEquipment));
+        reservation.setCreatedAt(Instant.now());
+        return reservationRepository.save(reservation);
+    }
+}
