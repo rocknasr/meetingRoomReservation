@@ -17,7 +17,6 @@ public class OrganizerSummaryResponse {
     private BuildingResponse building;
     private int floor;
 
-    /** Construit la reponse a partir de l'organisateur enregistre en base. */
     public static OrganizerSummaryResponse from(Organizer organizer) {
         return new OrganizerSummaryResponse(
                 organizer.getId(),

@@ -24,7 +24,6 @@ public class AvailableRoomResponse {
     private List<EquipmentResponse> equipment;
     private int unusedCapacity;
 
-    /** Construit la reponse pour une salle compatible avec la demande. */
     public static AvailableRoomResponse from(Room room, int requestedCapacity) {
         return new AvailableRoomResponse(
                 room.getId(),

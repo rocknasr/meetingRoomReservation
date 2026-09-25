@@ -14,20 +14,7 @@ import java.util.List;
 @Repository
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
 
-    /**
-     * Retourne toutes les reservations d'un statut donne, toutes salles confondues.
-     *
-     * @param status statut recherche
-     * @return les reservations correspondantes
-     */
     List<Reservation> findByStatus(ReservationStatus status);
 
-    /**
-     * Retourne les reservations d'un statut donne pour une salle.
-     *
-     * @param roomId identifiant de la salle
-     * @param status statut recherche
-     * @return les reservations correspondantes
-     */
     List<Reservation> findByRoomIdAndStatus(Long roomId, ReservationStatus status);
 }

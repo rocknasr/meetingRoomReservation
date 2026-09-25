@@ -30,12 +30,10 @@ public class ReservationResponse {
     private List<String> requiredEquipmentCodes;
     private OffsetDateTime createdAt;
 
-    /** Construit la reponse a partir de la reservation enregistree en base. */
     public static ReservationResponse from(Reservation reservation) {
         List<String> equipmentCodes = new ArrayList<>(reservation.getRequiredEquipmentCodes());
         Collections.sort(equipmentCodes);
 
-        // Les instants sont stockes en UTC et exposes en UTC, au format ISO 8601.
         return new ReservationResponse(
                 reservation.getId(),
                 reservation.getTitle(),

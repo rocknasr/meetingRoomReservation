@@ -29,13 +29,6 @@ public class GlobalExceptionHandler {
 
     private static final String VALIDATION_MESSAGE = "La requete contient des donnees invalides";
 
-    /**
-     * Traite les erreurs de validation metier, qui portent des messages par champ.
-     *
-     * @param exception erreur levee par un service
-     * @param request   requete fautive, utilisee pour renseigner le chemin
-     * @return la reponse 400 correspondante
-     */
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(
             ValidationException exception, HttpServletRequest request) {
@@ -43,13 +36,6 @@ public class GlobalExceptionHandler {
                 exception.getDetails(), exception.getFieldErrors());
     }
 
-    /**
-     * Traite toutes les autres erreurs metier, dont le statut vient du code d'erreur.
-     *
-     * @param exception erreur levee par un service
-     * @param request   requete fautive
-     * @return la reponse correspondant au code d'erreur
-     */
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiErrorResponse> handleApiException(
             ApiException exception, HttpServletRequest request) {
@@ -57,13 +43,6 @@ public class GlobalExceptionHandler {
                 exception.getDetails(), Map.of());
     }
 
-    /**
-     * Traite les corps de requete invalides au sens de Bean Validation.
-     *
-     * @param exception erreur de validation du corps de la requete
-     * @param request   requete fautive
-     * @return la reponse 400 listant les champs en erreur
-     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidBody(
             MethodArgumentNotValidException exception, HttpServletRequest request) {
@@ -74,13 +53,7 @@ public class GlobalExceptionHandler {
         return build(ApiErrorCode.VALIDATION_ERROR, VALIDATION_MESSAGE, request, Map.of(), fieldErrors);
     }
 
-    /**
-     * Traite les parametres de requete invalides valides au niveau de la methode.
-     *
-     * @param exception erreur de validation des parametres
-     * @param request   requete fautive
-     * @return la reponse 400 listant les parametres en erreur
-     */
+    // Parametres de requete invalides, par exemple capacity=0 sur /api/rooms/available.
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidParameters(
             HandlerMethodValidationException exception, HttpServletRequest request) {
@@ -100,13 +73,6 @@ public class GlobalExceptionHandler {
         return build(ApiErrorCode.VALIDATION_ERROR, VALIDATION_MESSAGE, request, Map.of(), fieldErrors);
     }
 
-    /**
-     * Traite les violations de contraintes levees hors du cycle de binding.
-     *
-     * @param exception violation de contrainte
-     * @param request   requete fautive
-     * @return la reponse 400 listant les champs en erreur
-     */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleConstraintViolation(
             ConstraintViolationException exception, HttpServletRequest request) {
@@ -117,13 +83,6 @@ public class GlobalExceptionHandler {
         return build(ApiErrorCode.VALIDATION_ERROR, VALIDATION_MESSAGE, request, Map.of(), fieldErrors);
     }
 
-    /**
-     * Traite l'absence d'un parametre de requete obligatoire.
-     *
-     * @param exception parametre manquant
-     * @param request   requete fautive
-     * @return la reponse 400 nommant le parametre attendu
-     */
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ApiErrorResponse> handleMissingParameter(
             MissingServletRequestParameterException exception, HttpServletRequest request) {
@@ -131,13 +90,6 @@ public class GlobalExceptionHandler {
                 Map.of(exception.getParameterName(), "est obligatoire"));
     }
 
-    /**
-     * Traite un parametre dont le type ne correspond pas, par exemple une date mal formee.
-     *
-     * @param exception parametre inconvertible
-     * @param request   requete fautive
-     * @return la reponse 400 nommant le parametre fautif
-     */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiErrorResponse> handleTypeMismatch(
             MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
@@ -145,13 +97,6 @@ public class GlobalExceptionHandler {
                 Map.of(exception.getName(), "a un format invalide"));
     }
 
-    /**
-     * Traite un corps de requete absent ou illisible, par exemple un JSON malforme.
-     *
-     * @param exception corps illisible
-     * @param request   requete fautive
-     * @return la reponse 400 correspondante
-     */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiErrorResponse> handleUnreadableBody(
             HttpMessageNotReadableException exception, HttpServletRequest request) {
@@ -159,13 +104,7 @@ public class GlobalExceptionHandler {
                 Map.of("body", "est absent ou mal forme"));
     }
 
-    /**
-     * Filet de securite pour les contraintes d'unicite rejetees par la base.
-     *
-     * @param exception violation d'integrite
-     * @param request   requete fautive
-     * @return la reponse 409 {@code RESOURCE_ALREADY_EXISTS}
-     */
+    // Filet de securite si deux requetes simultanees passent le controle d'unicite du service.
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleDataIntegrity(
             DataIntegrityViolationException exception, HttpServletRequest request) {
@@ -174,9 +113,6 @@ public class GlobalExceptionHandler {
                 request, Map.of(), Map.of());
     }
 
-    /**
-     * Assemble la reponse d'erreur commune a tous les cas.
-     */
     private ResponseEntity<ApiErrorResponse> build(
             ApiErrorCode code,
             String message,
@@ -193,9 +129,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(code.getStatus()).body(body);
     }
 
-    /**
-     * Extrait le nom du champ fautif du chemin d'une violation de contrainte.
-     */
+    // Transforme "findAvailableRooms.capacity" en "capacity".
     private String lastPathNode(ConstraintViolation<?> violation) {
         String path = violation.getPropertyPath().toString();
         int lastDot = path.lastIndexOf('.');

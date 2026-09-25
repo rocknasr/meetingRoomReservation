@@ -46,7 +46,6 @@ public class Room {
     @Column(name = "FLOOR", nullable = false)
     private int floor;
 
-    /** Nombre maximal de participants pouvant etre accueillis. */
     @Column(name = "CAPACITY", nullable = false)
     private int capacity;
 
@@ -69,20 +68,10 @@ public class Room {
         this.status = RoomStatus.AVAILABLE;
     }
 
-    /**
-     * Indique si la salle peut etre proposee ou reservee.
-     *
-     * @return vrai lorsque la salle n'est pas en maintenance
-     */
     public boolean isAvailable() {
         return status == RoomStatus.AVAILABLE;
     }
 
-    /**
-     * Retourne les codes des equipements installes dans la salle.
-     *
-     * @return l'ensemble des codes, eventuellement vide
-     */
     public Set<String> getEquipmentCodes() {
         Set<String> codes = new LinkedHashSet<>();
         for (Equipment item : equipment) {
@@ -91,23 +80,10 @@ public class Room {
         return codes;
     }
 
-    /**
-     * Verifie que la salle possede tous les equipements demandes. La presence
-     * d'equipements supplementaires est autorisee.
-     *
-     * @param requiredCodes codes exiges, eventuellement vides
-     * @return vrai lorsque aucun equipement ne manque
-     */
     public boolean hasAllEquipment(Set<String> requiredCodes) {
         return getEquipmentCodes().containsAll(requiredCodes);
     }
 
-    /**
-     * Liste les equipements exiges que la salle ne possede pas.
-     *
-     * @param requiredCodes codes exiges, eventuellement vides
-     * @return les codes manquants, dans l'ordre de la demande
-     */
     public Set<String> findMissingEquipment(Set<String> requiredCodes) {
         Set<String> installed = getEquipmentCodes();
 

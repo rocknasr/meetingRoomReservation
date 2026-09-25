@@ -17,10 +17,6 @@ public class ConflictException extends ApiException {
         super(code, message, details);
     }
 
-    /**
-     * @param room salle en maintenance
-     * @return l'erreur {@code ROOM_UNAVAILABLE}
-     */
     public static ConflictException roomUnavailable(Room room) {
         return new ConflictException(
                 ApiErrorCode.ROOM_UNAVAILABLE,
@@ -28,11 +24,6 @@ public class ConflictException extends ApiException {
                 Map.of("roomId", room.getId()));
     }
 
-    /**
-     * @param room                 salle choisie
-     * @param numberOfParticipants nombre de participants demande
-     * @return l'erreur {@code ROOM_CAPACITY_EXCEEDED}
-     */
     public static ConflictException roomCapacityExceeded(Room room, int numberOfParticipants) {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("roomId", room.getId());
@@ -44,11 +35,6 @@ public class ConflictException extends ApiException {
                 details);
     }
 
-    /**
-     * @param room         salle choisie
-     * @param missingCodes codes d'equipement absents de la salle
-     * @return l'erreur {@code MISSING_REQUIRED_EQUIPMENT}
-     */
     public static ConflictException missingEquipment(Room room, Set<String> missingCodes) {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("roomId", room.getId());
@@ -59,11 +45,6 @@ public class ConflictException extends ApiException {
                 details);
     }
 
-    /**
-     * @param room     salle choisie
-     * @param conflict reservation confirmee qui chevauche la periode
-     * @return l'erreur {@code ROOM_ALREADY_RESERVED}
-     */
     public static ConflictException roomAlreadyReserved(Room room, Reservation conflict) {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("roomId", room.getId());
@@ -74,9 +55,6 @@ public class ConflictException extends ApiException {
                 details);
     }
 
-    /**
-     * @return l'erreur {@code NO_COMPATIBLE_ROOM} de l'attribution automatique
-     */
     public static ConflictException noCompatibleRoom() {
         return new ConflictException(
                 ApiErrorCode.NO_COMPATIBLE_ROOM,
@@ -84,10 +62,6 @@ public class ConflictException extends ApiException {
                 Map.of());
     }
 
-    /**
-     * @param reservationId identifiant de la reservation deja annulee
-     * @return l'erreur {@code RESERVATION_ALREADY_CANCELLED}
-     */
     public static ConflictException reservationAlreadyCancelled(Long reservationId) {
         return new ConflictException(
                 ApiErrorCode.RESERVATION_ALREADY_CANCELLED,
@@ -95,10 +69,6 @@ public class ConflictException extends ApiException {
                 Map.of("reservationId", reservationId));
     }
 
-    /**
-     * @param highestOccupiedFloor etage occupe le plus eleve du batiment
-     * @return l'erreur {@code BUILDING_FLOOR_COUNT_CONFLICT}
-     */
     public static ConflictException buildingFloorCount(int highestOccupiedFloor) {
         return new ConflictException(
                 ApiErrorCode.BUILDING_FLOOR_COUNT_CONFLICT,

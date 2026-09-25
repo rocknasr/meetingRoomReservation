@@ -32,21 +32,12 @@ public class BuildingController {
         this.buildingService = buildingService;
     }
 
-    /**
-     * Cree un batiment.
-     *
-     * @param request nom et nombre d'etages
-     * @return 201 avec le batiment cree et son URI
-     */
     @PostMapping
     public ResponseEntity<BuildingResponse> createBuilding(@Valid @RequestBody BuildingRequest request) {
         BuildingResponse created = BuildingResponse.from(buildingService.create(request));
         return ResponseEntity.created(URI.create("/api/buildings/" + created.getId())).body(created);
     }
 
-    /**
-     * @return tous les batiments, tries par nom sans tenir compte de la casse
-     */
     @GetMapping
     public List<BuildingResponse> listBuildings() {
         List<BuildingResponse> response = new ArrayList<>();
@@ -56,22 +47,11 @@ public class BuildingController {
         return response;
     }
 
-    /**
-     * @param buildingId identifiant du batiment
-     * @return le batiment demande
-     */
     @GetMapping("/{buildingId}")
     public BuildingResponse getBuilding(@PathVariable Long buildingId) {
         return BuildingResponse.from(buildingService.findById(buildingId));
     }
 
-    /**
-     * Remplace le nom et le nombre d'etages d'un batiment.
-     *
-     * @param buildingId identifiant du batiment
-     * @param request    nouvelles informations
-     * @return le batiment mis a jour
-     */
     @PutMapping("/{buildingId}")
     public BuildingResponse updateBuilding(
             @PathVariable Long buildingId, @Valid @RequestBody BuildingRequest request) {

@@ -34,6 +34,5 @@ public class RoomRequest {
     @Min(1)
     private Integer capacity;
 
-    /** Ignore par la modification : le PUT ne change pas les equipements. */
     private Set<@Pattern(regexp = "^[A-Z][A-Z0-9_]{1,49}$") String> equipmentCodes;
 }

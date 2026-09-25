@@ -26,7 +26,6 @@ public class RoomResponse {
     private RoomStatus status;
     private List<EquipmentResponse> equipment;
 
-    /** Construit la reponse a partir de la salle enregistree en base. */
     public static RoomResponse from(Room room) {
         return new RoomResponse(
                 room.getId(),
@@ -38,7 +37,6 @@ public class RoomResponse {
                 equipmentOf(room));
     }
 
-    /** Trie les equipements par code, pour que la reponse soit toujours la meme. */
     static List<EquipmentResponse> equipmentOf(Room room) {
         List<Equipment> equipment = new ArrayList<>(room.getEquipment());
         equipment.sort(Comparator.comparing(Equipment::getCode));

@@ -30,12 +30,6 @@ public class EquipmentController {
         this.equipmentService = equipmentService;
     }
 
-    /**
-     * Cree un equipement.
-     *
-     * @param request code et libelle
-     * @return 201 avec l'equipement cree et son URI
-     */
     @PostMapping
     public ResponseEntity<EquipmentResponse> createEquipment(
             @Valid @RequestBody CreateEquipmentRequest request) {
@@ -43,9 +37,6 @@ public class EquipmentController {
         return ResponseEntity.created(URI.create("/api/equipment/" + created.getId())).body(created);
     }
 
-    /**
-     * @return tous les equipements, tries par code croissant
-     */
     @GetMapping
     public List<EquipmentResponse> listEquipment() {
         List<EquipmentResponse> response = new ArrayList<>();

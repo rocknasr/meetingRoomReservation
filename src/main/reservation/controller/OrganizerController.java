@@ -31,12 +31,6 @@ public class OrganizerController {
         this.organizerService = organizerService;
     }
 
-    /**
-     * Cree un organisateur localise dans un batiment existant.
-     *
-     * @param request identite, adresse e-mail et localisation
-     * @return 201 avec l'organisateur cree et son URI
-     */
     @PostMapping
     public ResponseEntity<OrganizerResponse> createOrganizer(
             @Valid @RequestBody CreateOrganizerRequest request) {
@@ -44,9 +38,6 @@ public class OrganizerController {
         return ResponseEntity.created(URI.create("/api/organizers/" + created.getId())).body(created);
     }
 
-    /**
-     * @return tous les organisateurs, tries par nom puis par identifiant
-     */
     @GetMapping
     public List<OrganizerResponse> listOrganizers() {
         List<OrganizerResponse> response = new ArrayList<>();
@@ -56,10 +47,6 @@ public class OrganizerController {
         return response;
     }
 
-    /**
-     * @param organizerId identifiant de l'organisateur
-     * @return l'organisateur demande
-     */
     @GetMapping("/{organizerId}")
     public OrganizerResponse getOrganizer(@PathVariable Long organizerId) {
         return OrganizerResponse.from(organizerService.findById(organizerId));

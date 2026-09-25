@@ -26,7 +26,6 @@ public class Equipment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Code technique unique, par exemple {@code PROJECTOR}. */
     @Column(name = "CODE", nullable = false)
     private String code;
 

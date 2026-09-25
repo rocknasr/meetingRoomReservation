@@ -13,17 +13,7 @@ import java.util.List;
 @Repository
 public interface OrganizerRepository extends JpaRepository<Organizer, Long> {
 
-    /**
-     * @param email adresse a tester
-     * @return vrai si un organisateur utilise deja cette adresse
-     */
     boolean existsByEmailIgnoreCase(String email);
 
-    /**
-     * Retourne les organisateurs rattaches a un batiment.
-     *
-     * @param buildingId identifiant du batiment
-     * @return les organisateurs de ce batiment
-     */
     List<Organizer> findByBuildingId(Long buildingId);
 }

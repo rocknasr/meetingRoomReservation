@@ -13,7 +13,6 @@ import java.util.Map;
 @Getter
 public class ValidationException extends ApiException {
 
-    /** Message d'erreur par nom de champ, repris dans {@code fieldErrors}. */
     private final Map<String, String> fieldErrors;
 
     public ValidationException(Map<String, String> fieldErrors) {
@@ -21,13 +20,6 @@ public class ValidationException extends ApiException {
         this.fieldErrors = new LinkedHashMap<>(fieldErrors);
     }
 
-    /**
-     * Construit l'erreur portant sur un etage absent du batiment reference.
-     *
-     * @param field           nom du champ fautif dans la requete
-     * @param numberOfFloors  nombre d'etages du batiment reference
-     * @return l'erreur de validation correspondante
-     */
     public static ValidationException floorOutOfBuilding(String field, int numberOfFloors) {
         return new ValidationException(Map.of(
                 field,

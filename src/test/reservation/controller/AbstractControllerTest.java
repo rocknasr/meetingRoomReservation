@@ -1,6 +1,17 @@
 package reservation.controller;
 
-import tools.jackson.databind.ObjectMapper;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+
 import reservation.model.Building;
 import reservation.model.Equipment;
 import reservation.model.Organizer;
@@ -10,25 +21,9 @@ import reservation.repository.EquipmentRepository;
 import reservation.repository.OrganizerRepository;
 import reservation.repository.ReservationRepository;
 import reservation.repository.RoomRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.ObjectMapper;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
-import java.util.LinkedHashSet;
 
-/**
- * Socle commun aux tests d'integration : contexte Spring complet, MockMvc et jeu
- * de donnees reconstruit avant chaque test.
- *
- * <p>La base est videe avant chaque test, de sorte que les donnees inserees ici
- * n'influencent pas les tests suivants.</p>
- */
 @SpringBootTest
 @AutoConfigureMockMvc
 abstract class AbstractControllerTest {
@@ -54,10 +49,7 @@ abstract class AbstractControllerTest {
     @Autowired
     protected ReservationRepository reservationRepository;
 
-    /**
-     * Vide la base des donnees d'exemple livrees par la migration, afin que chaque
-     * test parte d'un etat connu.
-     */
+   
     @BeforeEach
     void clearDatabase() {
         reservationRepository.deleteAll();

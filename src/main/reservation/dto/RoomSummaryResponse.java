@@ -20,7 +20,6 @@ public class RoomSummaryResponse {
     private int capacity;
     private RoomStatus status;
 
-    /** Construit la reponse a partir de la salle enregistree en base. */
     public static RoomSummaryResponse from(Room room) {
         return new RoomSummaryResponse(
                 room.getId(),

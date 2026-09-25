@@ -41,12 +41,6 @@ public class Building {
         this.numberOfFloors = numberOfFloors;
     }
 
-    /**
-     * Indique si un etage existe dans ce batiment.
-     *
-     * @param floor numero d'etage a verifier, le rez-de-chaussee valant 0
-     * @return vrai lorsque l'etage est compris entre 0 et {@code numberOfFloors - 1}
-     */
     public boolean hasFloor(int floor) {
         return floor >= 0 && floor < numberOfFloors;
     }

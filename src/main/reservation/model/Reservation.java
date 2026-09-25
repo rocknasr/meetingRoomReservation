@@ -52,11 +52,9 @@ public class Reservation {
     @JoinColumn(name = "ORGANIZER_ID", nullable = false)
     private Organizer organizer;
 
-    /** Debut de la periode, inclus. */
     @Column(name = "START_AT", nullable = false)
     private Instant start;
 
-    /** Fin de la periode, exclue : deux reservations consecutives sont autorisees. */
     @Column(name = "END_AT", nullable = false)
     private Instant end;
 
@@ -67,7 +65,6 @@ public class Reservation {
     @Column(name = "STATUS", nullable = false)
     private ReservationStatus status = ReservationStatus.CONFIRMED;
 
-    /** Codes exiges au moment de la demande, conserves tels quels pour l'historique. */
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "RESERVATION_EQUIPMENT",
@@ -78,26 +75,11 @@ public class Reservation {
     @Column(name = "CREATED_AT", nullable = false)
     private Instant createdAt;
 
-    /**
-     * Indique si cette reservation bloque encore la salle.
-     *
-     * @return vrai tant que la reservation n'est pas annulee
-     */
     public boolean isConfirmed() {
         return status == ReservationStatus.CONFIRMED;
     }
 
-    /**
-     * Teste le chevauchement avec une periode, selon la regle
-     * {@code existante.start < nouvelle.end ET existante.end > nouvelle.start}.
-     *
-     * <p>Deux reservations consecutives, par exemple 10:00-11:00 et 11:00-12:00,
-     * ne se chevauchent donc pas.</p>
-     *
-     * @param otherStart debut de la periode comparee
-     * @param otherEnd   fin de la periode comparee
-     * @return vrai lorsque les deux periodes se chevauchent
-     */
+    // Bornes exclusives : une reunion peut commencer a l'instant ou la precedente se termine.
     public boolean overlaps(Instant otherStart, Instant otherEnd) {
         return start.isBefore(otherEnd) && end.isAfter(otherStart);
     }

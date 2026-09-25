@@ -16,7 +16,6 @@ public class BuildingResponse {
     private String name;
     private int numberOfFloors;
 
-    /** Construit la reponse a partir du batiment enregistre en base. */
     public static BuildingResponse from(Building building) {
         return new BuildingResponse(building.getId(), building.getName(), building.getNumberOfFloors());
     }

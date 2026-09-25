@@ -18,7 +18,6 @@ public class OrganizerResponse {
     private int floor;
     private String email;
 
-    /** Construit la reponse a partir de l'organisateur enregistre en base. */
     public static OrganizerResponse from(Organizer organizer) {
         return new OrganizerResponse(
                 organizer.getId(),
